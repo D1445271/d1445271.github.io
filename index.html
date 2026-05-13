@@ -2,61 +2,153 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>Antigravity 象棋網頁版</title>
+    <title>Antigravity 專業象棋版</title>
     <style>
         body { text-align: center; background: #f4e4bc; font-family: "Microsoft JhengHei", sans-serif; }
         canvas { background: #eac07b; border: 5px double #5d4037; cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
-        .info { margin: 20px; font-size: 20px; color: #5d4037; font-weight: bold; }
-        .anti-btn { padding: 10px 20px; background: #5d4037; color: white; border: none; border-radius: 5px; cursor: pointer; margin-bottom: 10px; }
+        .info { margin: 15px; font-size: 18px; color: #5d4037; font-weight: bold; }
+        .controls { margin-bottom: 10px; }
+        button { padding: 8px 15px; cursor: pointer; background: #5d4037; color: white; border: none; border-radius: 4px; }
     </style>
 </head>
 <body>
-    <h1>♟️ Antigravity Online Chess</h1>
-    <!-- 模擬 antigravity 彩蛋的按鈕 -->
-    <button class="anti-btn" onclick="window.open('https://xkcd.com/353/')">觸發反重力模式 (Python Egg)</button>
-    
-    <div class="info">操作：點擊棋子後點擊目標位置移動</div>
+    <h1>♟️ Antigravity 象棋 (規則加強版)</h1>
+    <div class="controls">
+        <button onclick="window.open('https://xkcd.com/353/')">觸發反重力模式</button>
+        <button onclick="location.reload()">重新開始</button>
+    </div>
+    <div class="info" id="status">紅方先行</div>
     <canvas id="chess" width="400" height="450"></canvas>
 
     <script>
-        const canvas = document.getElementById('chess');
-        const ctx = canvas.getContext('2d');
+        const canvas = document.getElementById('chess'), ctx = canvas.getContext('2d');
         const S = 40, off = 40;
-        let board = [
-            ['車','馬','象','士','將','士','象','馬','車'],
-            [], [], ['卒','','卒','','卒','','卒','','卒'],
-            [], [], ['兵','','兵','','兵','','兵','','兵'],
-            [], [], ['車','馬','相','仕','帥','仕','相','馬','車']
-        ];
+        let turn = 'red'; // red or black
         let sel = null;
+
+        // 初始棋盤佈局
+        let board = [
+            ['r_c','r_m','r_x','r_s','r_j','r_s','r_x','r_m','r_c'],
+            [], [],
+            ['','r_p','','','','','','r_p',''],
+            ['r_z','','r_z','','r_z','','r_z','','r_z'],
+            [], [],
+            ['b_z','','b_z','','b_z','','b_z','','b_z'],
+            ['','b_p','','','','','','b_p',''],
+            [],
+            ['b_c','b_m','b_x','b_s','b_j','b_s','b_x','b_m','b_c']
+        ];
+        // 為了符合視覺，將陣列翻轉顯示 (黑上紅下)
+        const pieceName = {
+            'r_c':'車','r_m':'馬','r_x':'象','r_s':'士','r_j':'將','r_p':'炮','r_z':'卒',
+            'b_c':'車','b_m':'馬','b_x':'相','b_s':'仕','b_j':'帥','b_p':'炮','b_z':'兵'
+        };
 
         function draw() {
             ctx.clearRect(0,0,400,450);
-            ctx.lineWidth = 1; ctx.strokeStyle = "#333";
-            for(let i=0; i<10; i++) { ctx.beginPath(); ctx.moveTo(off, off+i*S); ctx.lineTo(off+8*S, off+i*S); ctx.stroke(); }
-            for(let i=0; i<9; i++) { ctx.beginPath(); ctx.moveTo(off+i*S, off); ctx.lineTo(off+i*S, off+9*S); ctx.stroke(); }
-            ctx.font = "24px KaiTi"; ctx.textAlign = "center";
+            ctx.strokeStyle = "#333";
+            // 畫格線
+            for(let i=0; i<10; i++){ctx.beginPath();ctx.moveTo(off,off+i*S);ctx.lineTo(off+8*S,off+i*S);ctx.stroke();}
+            for(let i=0; i<9; i++){
+                ctx.beginPath();ctx.moveTo(off+i*S,off);
+                if(i==0 || i==8){ ctx.lineTo(off+i*S,off+9*S); }
+                else { ctx.lineTo(off+i*S,off+4*S); ctx.moveTo(off+i*S,off+5*S); ctx.lineTo(off+i*S,off+9*S); }
+                ctx.stroke();
+            }
+            // 畫九宮格斜線
+            ctx.beginPath(); ctx.moveTo(off+3*S,off); ctx.lineTo(off+5*S,off+2*S); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(off+5*S,off); ctx.lineTo(off+3*S,off+2*S); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(off+3*S,off+7*S); ctx.lineTo(off+5*S,off+9*S); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(off+5*S,off+7*S); ctx.lineTo(off+3*S,off+9*S); ctx.stroke();
+
+            // 畫棋子
             board.forEach((row, r) => row.forEach((p, c) => {
-                if(p) {
+                if(p){
                     ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(off+c*S, off+r*S, 18, 0, 7); ctx.fill(); ctx.stroke();
-                    ctx.fillStyle = (sel && sel.r==r && sel.c==c) ? "blue" : (r<5 ? "black" : "red");
-                    ctx.fillText(p, off+c*S, off+r*S+8);
+                    if(sel && sel.r==r && sel.c==c) ctx.strokeStyle = "blue", ctx.lineWidth=3, ctx.stroke(), ctx.lineWidth=1, ctx.strokeStyle="#333";
+                    ctx.fillStyle = p.startsWith('r') ? "black" : "red";
+                    ctx.font="24px KaiTi"; ctx.textAlign="center"; ctx.fillText(pieceName[p], off+c*S, off+r*S+8);
                 }
             }));
         }
+
+        function canMove(p, r1, c1, r2, c2) {
+            const dr = r2 - r1, dc = c2 - c1;
+            const target = board[r2] ? board[r2][c2] : null;
+            if (target && target.startsWith(p[0])) return false; // 不能吃自己的棋子
+
+            const type = p.split('_')[1];
+            const absDr = Math.abs(dr), absDc = Math.abs(dc);
+
+            switch(type) {
+                case 'c': // 車
+                    if (dr !== 0 && dc !== 0) return false;
+                    return countPieces(r1, c1, r2, c2) === 0;
+                case 'm': // 馬
+                    if (!((absDr==2 && absDc==1) || (absDr==1 && absDc==2))) return false;
+                    return !board[r1 + Math.sign(dr)*(absDr==2?1:0)][c1 + Math.sign(dc)*(absDc==2?1:0)]; // 蹩馬腿
+                case 'x': // 象/相
+                    if (absDr!==2 || absDc!==2) return false;
+                    if (p[0]=='r' && r2 > 4) return false; // 黑象不過河
+                    if (p[0]=='b' && r2 < 5) return false; // 紅相不過河
+                    return !board[r1+dr/2][c1+dc/2]; // 塞象眼
+                case 's': // 士
+                    if (absDr!==1 || absDc!==1) return false;
+                    if (c2<3 || c2>5) return false; // 九宮格限制
+                    return p[0]=='r' ? r2<=2 : r2>=7;
+                case 'j': // 將/帥
+                    if (absDr + absDc !== 1) return false;
+                    if (c2<3 || c2>5) return false;
+                    return p[0]=='r' ? r2<=2 : r2>=7;
+                case 'p': // 炮
+                    const count = countPieces(r1, c1, r2, c2);
+                    if (dr !== 0 && dc !== 0) return false;
+                    return target ? count === 1 : count === 0;
+                case 'z': // 卒/兵
+                    if (p[0]=='r') { // 黑卒
+                        if (dr < 0) return false; // 不能後退
+                        if (r1 <= 4 && dc !== 0) return false; // 未過河不能橫走
+                        return absDr + absDc === 1;
+                    } else { // 紅兵
+                        if (dr > 0) return false;
+                        if (r1 >= 5 && dc !== 0) return false;
+                        return absDr + absDc === 1;
+                    }
+            }
+            return false;
+        }
+
+        function countPieces(r1, c1, r2, c2) {
+            let count = 0;
+            if (r1 === r2) {
+                for (let i = Math.min(c1, c2) + 1; i < Math.max(c1, c2); i++) if (board[r1][i]) count++;
+            } else {
+                for (let i = Math.min(r1, r2) + 1; i < Math.max(r1, r2); i++) if (board[i][c1]) count++;
+            }
+            return count;
+        }
+
         canvas.onclick = (e) => {
             const rect = canvas.getBoundingClientRect();
-            const c = Math.round((e.clientX - rect.left - off) / S);
-            const r = Math.round((e.clientY - rect.top - off) / S);
-            if(sel) {
-                if(board[r]) { board[r][c] = board[sel.r][sel.c]; board[sel.r][sel.c] = ''; }
-                sel = null;
-            } else if(board[r] && board[r][c]) { sel = {r, c}; }
+            const c = Math.round((e.clientX-rect.left-off)/S), r = Math.round((e.clientY-rect.top-off)/S);
+            const p = board[r] ? board[r][c] : null;
+
+            if (sel) {
+                if (canMove(board[sel.r][sel.c], sel.r, sel.c, r, c)) {
+                    board[r][c] = board[sel.r][sel.c];
+                    board[sel.r][sel.c] = '';
+                    turn = (turn === 'red' ? 'black' : 'red');
+                    document.getElementById('status').innerText = (turn === 'red' ? '紅方先行' : '黑方先行');
+                    sel = null;
+                } else {
+                    sel = (p && ((turn==='red' && p.startsWith('b')) || (turn==='black' && p.startsWith('r')))) ? {r,c} : null;
+                }
+            } else {
+                if (p && ((turn==='red' && p.startsWith('b')) || (turn==='black' && p.startsWith('r')))) sel = {r, c};
+            }
             draw();
         };
         draw();
-        // 進入頁面時小驚喜：自動彈出反重力漫畫 (模仿 antigravity)
-        console.log("Antigravity loaded. Python is making you fly!");
     </script>
 </body>
 </html>
